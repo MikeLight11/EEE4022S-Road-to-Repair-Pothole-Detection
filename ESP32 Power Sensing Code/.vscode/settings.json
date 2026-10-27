@@ -1,0 +1,5 @@
+{
+    "idf.flashType": "UART",
+    "idf.port": "/dev/tty.usbmodem101",
+    "idf.currentSetup": "/Users/michaellighton/.espressif/v6.1/esp-idf"
+}

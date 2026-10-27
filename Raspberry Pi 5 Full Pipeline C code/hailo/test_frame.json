@@ -1,0 +1,20 @@
+{
+ "source": "ir-cam-vid-4.mov frame 4707",
+ "weights": "best_seg.pt",
+ "size": [
+  1920,
+  1080
+ ],
+ "detections": [
+  {
+   "cls": "Pothole",
+   "conf": 0.859,
+   "xyxy": [
+    850.7,
+    674.3,
+    1184.4,
+    812.0
+   ]
+  }
+ ]
+}

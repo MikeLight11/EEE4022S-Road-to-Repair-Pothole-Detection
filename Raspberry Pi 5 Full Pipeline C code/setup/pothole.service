@@ -1,0 +1,14 @@
+[Unit]
+Description=Pothole detector (camera + livestream)
+After=network.target
+
+[Service]
+# setup_pi.sh fills in User / paths for the account that runs it
+User=pi
+WorkingDirectory=/home/pi/pothole
+ExecStart=/home/pi/pothole/build/pothole
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

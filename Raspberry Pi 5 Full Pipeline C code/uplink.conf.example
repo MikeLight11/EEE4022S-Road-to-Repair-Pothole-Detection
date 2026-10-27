@@ -1,0 +1,20 @@
+# GPS and 4G upload. Copy to uplink.conf on the Pi (setup_pi.sh does this),
+# put the real API key in, then: sudo systemctl restart pothole
+# Values are single words (no spaces); '#' starts a comment.
+
+# Web app: the device's API key goes as "Authorization: Bearer <api_key>".
+# Without a URL or key, potholes stay in detections/ and nothing is uploaded.
+upload_url = https://potholevision.pythonanywhere.com/api/v1/detections
+api_key    = CHANGE_ME
+
+# SIM7600X 4G HAT, cabled to the Pi by its "USB" port (not "USB TO UART").
+# `build/sim7600_test ports` shows which ttyUSB is which. For the final build's
+# ATGM336H on the UART: gps_dev = /dev/serial0 and at_dev = none.
+gps_dev = /dev/ttyUSB1      # NMEA
+at_dev  = /dev/ttyUSB2      # AT commands (switches the GNSS on)
+
+# Locating (report, "Locating the Pothole"): the fix delay is the receiver's
+# epoch-to-Pi latency (0.2 s measured for the ATGM336H; not yet measured for
+# the SIM7600), and the offset is how far the receiver sits behind the camera.
+gps_delay_s  = 0.2
+gps_offset_m = 2.0

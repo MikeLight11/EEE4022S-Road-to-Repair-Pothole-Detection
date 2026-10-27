@@ -1,0 +1,32 @@
+# Camera calibration for measuring potholes on the road.
+# Copy to pothole.conf on the Pi (cp pothole.conf.example pothole.conf), edit,
+# then: sudo systemctl restart pothole. The log prints the values in use.
+# Without pothole.conf the built-in values below are used.
+#
+# Mount: measure these for the vehicle the camera is on. Sizes are sensitive to
+# them, tilt especially (about 19% length error per degree, see the report).
+h_mm     = 668.0      # camera lens height above the road, mm
+tilt_deg = 8.9118     # downward tilt below horizontal, degrees
+
+# Intrinsics of the OV5647 at 1920x1080 (checkerboard calibration). Only change
+# these if the camera, lens focus or resolution changes.
+f_px   = 2962.80
+cx     = 947.96
+cy     = 570.52
+width  = 1920
+height = 1080
+
+# Lens distortion (k1 k2 p1 p2 k3 from calibrate_camera.py). All zero = no
+# undistortion, as in the Python pipeline's default.
+k1 = 0
+k2 = 0
+p1 = 0
+p2 = 0
+k3 = 0
+
+# Tracking. A detection at >= start_conf starts a track and counts as a hit; a
+# pothole is reported after min_hits such hits. The report's values are 0.4 / 5,
+# but the INT8 HEF scores borderline potholes lower than PyTorch did, so on the
+# Pi 0.30 / 4 recovers most clear potholes (bench/eval_hef.py on ir-cam-vid-4).
+start_conf = 0.30
+min_hits   = 4

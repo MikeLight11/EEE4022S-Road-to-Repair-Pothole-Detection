@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <p class="muted">Enter the dashboard access key to view detections</p>
+    <form method="post">
+      <label for="access_key">Dashboard access key</label>
+      <input id="access_key" name="access_key" type="password" required autofocus>
+      {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+      <button type="submit">Open Map</button>
+    </form>
+  </main>
+</body>
+</html>

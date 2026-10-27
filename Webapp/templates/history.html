@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Status history · Pothole Monitor</title>
+  {% if tab == 'search' %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">{% endif %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='49') }}">
+</head>
+<body class="history-page">
+  <main class="shell">
+    <section class="workspace">
+      <aside class="job-sidebar" aria-label="Navigation">
+        <div class="brand-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg><h1>Pothole Monitor</h1></div>
+        {% set active_nav = 'history' %}{% include '_admin_nav.html' %}
+      </aside>
+      <section class="history-panel">
+        <div class="history-head">
+          <div>
+            <h2>Status history</h2>
+            <nav class="history-tabs" aria-label="Status history views">
+              <a href="{{ url_for('history_view') }}" class="{{ 'active' if tab == 'changes' }}">Recent changes</a>
+              <a href="{{ url_for('history_view', tab='search') }}" class="{{ 'active' if tab == 'search' }}">Find a pothole</a>
+            </nav>
+          </div>
+          {% if tab == 'changes' %}
+          <form method="get" class="history-filter">
+            <label for="history-job">Job</label>
+            <select id="history-job" name="job" data-autosubmit>
+              <option value="">All jobs</option>
+              {% for job in jobs %}<option value="{{ job.id }}"{{ ' selected' if job.id == job_filter }}>Job #{{ job.id }} · {{ job.name }}</option>{% endfor %}
+            </select>
+            <noscript><button type="submit">Filter</button></noscript>
+          </form>
+          {% endif %}
+        </div>
+
+        {% if tab == 'changes' %}
+        {% if entries %}
+        <div class="history-table-wrap">
+          <table class="history-table">
+            <thead><tr><th>When</th><th>Job</th><th>Suburb</th><th>Marked as</th><th>By</th><th>Crew location</th><th>Before / after</th></tr></thead>
+            <tbody>
+              {% for entry in entries %}
+              <tr>
+                <td class="history-when" data-utc="{{ entry.created_at.isoformat() }}">{{ entry.created_at.strftime('%d %b %Y %H:%M') }} UTC</td>
+                <td>{% if entry.job_id %}<a href="{{ url_for('job_view', job_id=entry.job_id) }}">Job #{{ entry.job_id }}</a>{% else %}<span class="muted-text">None</span>{% endif %}</td>
+                <td>{{ entry.suburb }}<small class="history-reason">Pothole #{{ entry.detection_id }} · {{ entry.severity|capitalize }}</small></td>
+                <td><span class="status-pill {{ entry.new_status }}">{{ entry.new_label }}</span>{% if entry.reason %}<small class="history-reason">{{ entry.reason }}</small>{% endif %}</td>
+                <td><span class="source-pill {{ entry.source }}">{{ 'Crew' if entry.source == 'crew' else 'Admin' }}</span></td>
+                <td>
+                  {% if entry.distance_m is not none %}
+                  <a href="{{ entry.maps_url }}" target="_blank" rel="noopener" class="{{ 'far-away' if entry.distance_m > 50 }}">{{ '%.0f'|format(entry.distance_m) }} m from pothole</a>
+                  {% if entry.accuracy_m %}<small class="history-reason">± {{ '%.0f'|format(entry.accuracy_m) }} m accuracy</small>{% endif %}
+                  {% elif entry.source == 'crew' %}<span class="muted-text">No location</span>
+                  {% else %}<span class="muted-text">n/a</span>{% endif %}
+                </td>
+                <td>
+                  <div class="photo-pair">
+                    <button class="photo-thumb" type="button" data-lightbox="{{ entry.before_url }}" data-caption="Before: detected pothole #{{ entry.detection_id }}"><img src="{{ entry.before_url }}" alt="Before"><span>Before</span></button>
+                    {% if entry.photo_url %}<button class="photo-thumb" type="button" data-lightbox="{{ entry.photo_url }}" data-caption="After: {{ entry.new_label|lower }} (pothole #{{ entry.detection_id }})"><img src="{{ entry.photo_url }}" alt="After"><span>After</span></button>
+                    {% else %}<span class="photo-thumb empty"><span>No after photo</span></span>{% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="list-empty history-empty">No status changes yet{% if job_filter %} for this job{% endif %}.</p>
+        {% endif %}
+
+        {% else %}
+        <div class="finder">
+          <div class="finder-side">
+            <form id="finder-form" class="finder-form">
+              <label for="finder-query">Address or pothole ID</label>
+              <div class="finder-row"><input id="finder-query" type="search" placeholder="e.g. 12 Main Rd, Rondebosch or #123" autocomplete="off"><button type="submit">Search</button></div>
+              <p class="finder-hint">Or click the map to drop a pin. Drag the pin to adjust.</p>
+            </form>
+            <div id="finder-places" class="finder-places" hidden></div>
+            <p id="finder-status" class="finder-status"></p>
+            <div id="finder-results" class="finder-results"></div>
+          </div>
+          <div class="finder-map-wrap">
+            <div id="finder-map" class="finder-map" aria-label="Search map"></div>
+            <div class="finder-radius-overlay"><label for="finder-radius">Within</label>
+              <select id="finder-radius">{% for radius in radii %}<option value="{{ radius }}"{{ ' selected' if radius == 250 }}>{{ radius if radius < 1000 else '1 km' }}{{ ' m' if radius < 1000 }}</option>{% endfor %}</select>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </section>
+    </section>
+  </main>
+  <div id="lightbox" class="lightbox" hidden><figure><button id="lightbox-close" class="card-close" type="button" aria-label="Close">&times;</button><img id="lightbox-image" alt=""><figcaption id="lightbox-caption"></figcaption></figure></div>
+  {% if tab == 'search' %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>{% endif %}
+  <script src="{{ url_for('static', filename='common.js', v='49') }}"></script>
+  {% if tab == 'search' %}<script src="{{ url_for('static', filename='finder.js', v='49') }}"></script>{% endif %}
+</body>
+</html>

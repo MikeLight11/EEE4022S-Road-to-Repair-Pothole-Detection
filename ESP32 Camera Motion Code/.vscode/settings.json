@@ -1,0 +1,14 @@
+{
+  "idf.currentSetup": "/Users/michaellighton/.espressif/v6.1/esp-idf",
+  "idf.port": "/dev/tty.usbmodem101",
+  "idf.customExtraVars": {
+    "IDF_TARGET": "esp32c3"
+  },
+  "clangd.path": "/Users/michaellighton/.espressif/tools/esp-clangd/esp-21.1.3_20260408/esp-clangd/bin/clangd",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=/Users/michaellighton/Library/CloudStorage/OneDrive-UniversityofCapeTown/EEE4022S - Pothole Detection/Tilt Angle ESP code/build"
+  ],
+  "idf.flashType": "UART"
+}

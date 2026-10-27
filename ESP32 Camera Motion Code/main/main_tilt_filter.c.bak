@@ -1,0 +1,222 @@
+// MPU6050 relative tilt angle logger for ESP32 (ESP-IDF, native driver/i2c_master.h)
+//
+// I2C pins: SCL = GPIO4, SDA = GPIO3
+// On boot, the current orientation is captured as the zero reference.
+// The console then reports how far pitch/roll have changed since boot
+// (e.g. tilt 5 degrees on Y -> output stays "Y: 5.0").
+
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/i2c_master.h"
+#include "driver/uart.h"
+#include "esp_timer.h"
+#include "esp_log.h"
+
+#define I2C_PORT        I2C_NUM_0
+#define SDA_PIN         GPIO_NUM_3
+#define SCL_PIN         GPIO_NUM_4
+#define I2C_FREQ_HZ     400000
+
+#define MPU6050_ADDR        0x68
+#define REG_PWR_MGMT_1      0x6B
+#define REG_ACCEL_XOUT_H    0x3B
+
+// Second UART used purely to output angle data, separate from the console.
+#define OUT_UART_PORT   UART_NUM_1
+#define OUT_UART_TX_PIN GPIO_NUM_5
+#define OUT_UART_RX_PIN GPIO_NUM_21
+#define OUT_UART_BAUD   9600
+
+static const char *TAG = "tilt";
+
+static const float ACCEL_SENS = 16384.0f;  // LSB/g at +-2g
+static const float GYRO_SENS  = 131.0f;    // LSB/(deg/s) at +-250 deg/s
+static const float ALPHA      = 0.96f;     // complementary filter weight (gyro trust)
+
+typedef struct {
+    int16_t ax, ay, az;
+    int16_t gx, gy, gz;
+} mpu_raw_t;
+
+static esp_err_t out_uart_init(void)
+{
+    uart_config_t conf = {
+        .baud_rate = OUT_UART_BAUD,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    esp_err_t err = uart_driver_install(OUT_UART_PORT, 256, 0, 0, NULL, 0);
+    if (err != ESP_OK) {
+        return err;
+    }
+    err = uart_param_config(OUT_UART_PORT, &conf);
+    if (err != ESP_OK) {
+        return err;
+    }
+    return uart_set_pin(OUT_UART_PORT, OUT_UART_TX_PIN, OUT_UART_RX_PIN,
+                         UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+}
+
+static i2c_master_dev_handle_t mpu_handle;
+
+static esp_err_t i2c_master_init(void)
+{
+    i2c_master_bus_config_t bus_conf = {
+        .i2c_port = I2C_PORT,
+        .sda_io_num = SDA_PIN,
+        .scl_io_num = SCL_PIN,
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = true,
+    };
+    i2c_master_bus_handle_t bus_handle;
+    esp_err_t err = i2c_new_master_bus(&bus_conf, &bus_handle);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    i2c_device_config_t dev_conf = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = MPU6050_ADDR,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+    return i2c_master_bus_add_device(bus_handle, &dev_conf, &mpu_handle);
+}
+
+static esp_err_t mpu6050_write_reg(uint8_t reg, uint8_t value)
+{
+    uint8_t buf[2] = { reg, value };
+    return i2c_master_transmit(mpu_handle, buf, sizeof(buf), pdMS_TO_TICKS(100));
+}
+
+static esp_err_t mpu6050_read_raw(mpu_raw_t *out)
+{
+    uint8_t reg = REG_ACCEL_XOUT_H;
+    uint8_t data[14];
+
+    esp_err_t err = i2c_master_transmit_receive(mpu_handle, &reg, 1, data, sizeof(data),
+                                                 pdMS_TO_TICKS(100));
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    out->ax = (int16_t)((data[0] << 8) | data[1]);
+    out->ay = (int16_t)((data[2] << 8) | data[3]);
+    out->az = (int16_t)((data[4] << 8) | data[5]);
+    // data[6],[7] = temperature, skipped
+    out->gx = (int16_t)((data[8] << 8) | data[9]);
+    out->gy = (int16_t)((data[10] << 8) | data[11]);
+    out->gz = (int16_t)((data[12] << 8) | data[13]);
+    return ESP_OK;
+}
+
+static float compute_accel_pitch(int16_t ax, int16_t ay, int16_t az)
+{
+    float axg = ax / ACCEL_SENS;
+    float ayg = ay / ACCEL_SENS;
+    float azg = az / ACCEL_SENS;
+    return atan2f(-axg, sqrtf(ayg * ayg + azg * azg)) * 180.0f / (float)M_PI;
+}
+
+static float compute_accel_roll(int16_t ax, int16_t ay, int16_t az)
+{
+    float ayg = ay / ACCEL_SENS;
+    float azg = az / ACCEL_SENS;
+    return atan2f(ayg, azg) * 180.0f / (float)M_PI;
+}
+
+void app_main(void)
+{
+    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_ERROR_CHECK(out_uart_init());
+
+    const char *ready_msg = "UART ready and outputting\n";
+    printf("%s", ready_msg);
+    uart_write_bytes(OUT_UART_PORT, ready_msg, strlen(ready_msg));
+
+    // Wake the MPU6050 (it starts in sleep mode).
+    ESP_ERROR_CHECK(mpu6050_write_reg(REG_PWR_MGMT_1, 0x00));
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    mpu_raw_t raw;
+    if (mpu6050_read_raw(&raw) != ESP_OK) {
+        ESP_LOGE(TAG, "MPU6050 not responding on SDA=GPIO%d SCL=GPIO%d", SDA_PIN, SCL_PIN);
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+    ESP_LOGI(TAG, "MPU6050 connected.");
+
+    // Average samples for a stable initial pitch/roll, and to measure the
+    // gyro's static bias, before the gyro-integrating loop takes over.
+    // Keep the board still during this period.
+    const int samples = 200;
+    long ax_sum = 0, ay_sum = 0, az_sum = 0;
+    long gx_sum = 0, gy_sum = 0;
+    for (int i = 0; i < samples; i++) {
+        mpu6050_read_raw(&raw);
+        ax_sum += raw.ax;
+        ay_sum += raw.ay;
+        az_sum += raw.az;
+        gx_sum += raw.gx;
+        gy_sum += raw.gy;
+        vTaskDelay(pdMS_TO_TICKS(3));
+    }
+    int16_t ax0 = ax_sum / samples;
+    int16_t ay0 = ay_sum / samples;
+    int16_t az0 = az_sum / samples;
+
+    // Static gyro offsets (deg/s) - subtracted from every reading below.
+    const float gyro_x_bias = (gx_sum / (float)samples) / GYRO_SENS;
+    const float gyro_y_bias = (gy_sum / (float)samples) / GYRO_SENS;
+
+    float pitch = compute_accel_pitch(ax0, ay0, az0);
+    float roll = compute_accel_roll(ax0, ay0, az0);
+
+    // Whatever orientation the board is in right now becomes "0 degrees".
+    const float pitch_offset = pitch;
+    const float roll_offset = roll;
+
+    ESP_LOGI(TAG, "Zero reference captured. Reporting relative tilt (deg).");
+
+    int64_t last_us = esp_timer_get_time();
+
+    while (1) {
+        if (mpu6050_read_raw(&raw) != ESP_OK) {
+            ESP_LOGW(TAG, "Read failed, skipping sample");
+            vTaskDelay(pdMS_TO_TICKS(50));
+            continue;
+        }
+
+        int64_t now_us = esp_timer_get_time();
+        float dt = (now_us - last_us) / 1000000.0f;
+        last_us = now_us;
+
+        float accel_pitch = compute_accel_pitch(raw.ax, raw.ay, raw.az);
+        float accel_roll = compute_accel_roll(raw.ax, raw.ay, raw.az);
+
+        float gyro_x_rate = (raw.gx / GYRO_SENS) - gyro_x_bias; // deg/s about X axis
+        float gyro_y_rate = (raw.gy / GYRO_SENS) - gyro_y_bias; // deg/s about Y axis
+
+        // Complementary filter: integrate gyro, correct drift with accelerometer.
+        pitch = ALPHA * (pitch + gyro_x_rate * dt) + (1.0f - ALPHA) * accel_pitch;
+        roll = ALPHA * (roll + gyro_y_rate * dt) + (1.0f - ALPHA) * accel_roll;
+
+        float rel_pitch = pitch - pitch_offset;
+        float rel_roll = roll - roll_offset;
+
+        char line[32];
+        int len = snprintf(line, sizeof(line), "X: %.1f  Y: %.1f (deg)\n", rel_roll, rel_pitch);
+
+        printf("%s", line);
+        uart_write_bytes(OUT_UART_PORT, line, len);
+
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}

@@ -1,0 +1,13 @@
+{#- Admin sidebar navigation, shared by the map pages and the history page. `active_nav`: "main", "history" or none. -#}
+<a class="nav-item{{ ' active' if active_nav == 'main' }}" href="{{ url_for('map_view') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg><span class="nav-label">Job Creator Map</span></a>
+<a class="nav-item{{ ' active' if active_nav == 'history' }}" href="{{ url_for('history_view') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5M12 7v5l3 2"/></svg><span class="nav-label">Status history</span></a>
+<div class="job-lists">
+  <div class="sidebar-heading"><h2>Open jobs</h2><span id="job-count" class="count-badge">0</span></div>
+  <nav id="job-list" class="job-list" aria-label="Open jobs"><p class="list-empty">Loading jobs...</p></nav>
+  <div class="sidebar-heading"><h2>Completed jobs</h2><span id="completed-job-count" class="count-badge">0</span></div>
+  <nav id="completed-job-list" class="job-list" aria-label="Completed jobs"></nav>
+</div>
+<div class="sidebar-footer">
+  <button id="refresh-page" class="nav-item" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg><span class="nav-label">Refresh</span></button>
+  <form method="post" action="{{ url_for('logout') }}"><button class="nav-item" type="submit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg><span class="nav-label">Sign out</span></button></form>
+</div>

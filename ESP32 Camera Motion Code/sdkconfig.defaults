@@ -1,0 +1,5 @@
+# Console over the native USB-C port (USB-Serial-JTAG), not UART0.
+# This frees GPIO20/GPIO21 (the C3's default UART0 pins) for the
+# dedicated angle-output UART1 used in main.c.
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y

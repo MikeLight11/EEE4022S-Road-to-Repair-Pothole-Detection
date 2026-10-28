@@ -3,6 +3,8 @@
 **EEE4022S Final Year Project, University of Cape Town, 2026**
 Michael Lighton · Supervisor: Dr Stephen Paine · Department of Electrical Engineering
 
+Webapp - https://potholevision.pythonanywhere.com/login (password = "pothole")
+
 ## Abstract
 
 Potholes are a constant problem on South African roads. Municipalities mostly find out about them through public complaints and manual inspections, which are slow and say little about how large each pothole is, making it difficult to plan repairs and estimate the materials needed. This project set out to automate the whole process, from the moment a vehicle starts driving to the moment a pothole is repaired. It developed a complete pipeline made up of a low-cost, vehicle-mounted device that detects, measures and locates potholes using only a single camera, and a web application that turns each detection into a repair job.
